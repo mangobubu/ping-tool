@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ping 工具</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="backdrop">
+      <main class="card">
+        <header>
+          <p class="eyebrow">持续 Ping + 分钟级日志</p>
+          <h1>Ping 工具</h1>
+          <p class="subtitle">按天/小时/分钟分层存储，记录到秒。</p>
+        </header>
+
+        <section class="panel">
+          <label class="field">
+            <span>目标地址</span>
+            <input id="address" type="text" placeholder="8.8.8.8 或 example.com" autocomplete="off" />
+          </label>
+
+          <div class="actions">
+            <button id="startBtn" class="primary">启动</button>
+            <button id="stopBtn" class="ghost" disabled>停止</button>
+          </div>
+        </section>
+
+        <section class="status">
+          <div class="status-row">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="statusText">空闲</span>
+          </div>
+          <div class="meta">
+            <span>日志目录：</span>
+            <span id="logPath" class="log-path">-</span>
+            <button id="changeLogDirBtn" class="mini ghost" type="button">修改保存位置</button>
+            <button id="alertBtn" class="mini ghost" type="button">告警设置</button>
+          </div>
+          <div id="errorText" class="error" role="alert"></div>
+        </section>
+
+        <section class="logs" aria-live="polite">
+          <div class="logs-header">
+            <h2>最近 100 条记录</h2>
+            <div class="logs-actions">
+              <button id="scrollTopBtn" class="mini ghost" type="button" hidden>回到顶部</button>
+              <button id="scrollBottomBtn" class="mini ghost" type="button" hidden>回到底部</button>
+              <span class="logs-hint">仅显示当前会话</span>
+            </div>
+          </div>
+          <div id="logEmpty" class="log-empty">暂无记录</div>
+          <ol id="logList" class="log-list"></ol>
+        </section>
+      </main>
+    </div>
+
+    <div id="alertModal" class="modal hidden" aria-hidden="true">
+      <div class="modal-backdrop" data-close="true"></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="alertTitle">
+        <header class="modal-header">
+          <div>
+            <p class="eyebrow">告警通知设置</p>
+            <h2 id="alertTitle">告警通知</h2>
+          </div>
+          <button id="closeAlertBtn" class="icon-button" type="button" aria-label="关闭">×</button>
+        </header>
+
+        <nav class="tabs" aria-label="告警配置">
+          <button class="tab active" type="button" data-tab="email">邮件配置</button>
+          <button class="tab" type="button" data-tab="wechat">微信通知</button>
+        </nav>
+
+        <section class="tab-panel" data-panel="email">
+          <div class="form-grid">
+            <label class="field">
+              <span>SMTP 主机</span>
+              <input id="smtpHost" type="text" placeholder="smtp.example.com" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>端口</span>
+              <input id="smtpPort" type="number" min="1" max="65535" placeholder="465" />
+            </label>
+            <label class="field">
+              <span>用户名</span>
+              <input id="smtpUser" type="text" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>密码</span>
+              <input id="smtpPass" type="password" autocomplete="new-password" />
+            </label>
+            <label class="field">
+              <span>发件人邮箱</span>
+              <input id="smtpFrom" type="email" placeholder="alert@example.com" />
+            </label>
+            <label class="field">
+              <span>测试收件人邮箱</span>
+              <input id="smtpTo" type="email" placeholder="you@example.com" />
+            </label>
+            <label class="field">
+              <span>加密方式</span>
+              <select id="smtpTlsMode">
+                <option value="ssl">SSL/TLS（465）</option>
+                <option value="starttls">STARTTLS（587）</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="modal-actions">
+            <button id="saveSmtpBtn" class="primary" type="button">保存配置</button>
+            <button id="exportAlertBtn" class="ghost" type="button">导出配置</button>
+            <button id="importAlertBtn" class="ghost" type="button">导入配置</button>
+            <button id="testSmtpBtn" class="ghost" type="button">发送测试邮件</button>
+          </div>
+          <div id="smtpStatus" class="hint"></div>
+        </section>
+
+        <section class="tab-panel hidden" data-panel="wechat">
+          <div class="placeholder">
+            <h3>微信通知</h3>
+            <p>占位：后续支持企业微信/微信 WebHook 等配置。</p>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
