@@ -1,8 +1,12 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use std::collections::VecDeque;
 use std::fs::{create_dir_all, read_to_string, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -606,27 +610,20 @@ fn push_log(logs: &Arc<Mutex<LogBuffer>>, entry: String) -> u64 {
 }
 
 fn ping_once(address: &str) -> Result<String, String> {
-  let output = if cfg!(target_os = "windows") {
-    Command::new("ping")
-      .args(["-n", "1", address])
-      .output()
-  } else {
-    Command::new("ping")
-      .args(["-c", "1", address])
-      .output()
-  }
-  .map_err(|e| format!("failed to spawn ping: {e}"))?;
+  let output = ping_command(address)
+    .output()
+    .map_err(|e| format!("failed to spawn ping: {e}"))?;
 
-  let stdout = String::from_utf8_lossy(&output.stdout);
-  let stderr = String::from_utf8_lossy(&output.stderr);
+  let stdout = decode_ping_output(&output.stdout);
+  let stderr = decode_ping_output(&output.stderr);
 
   let success = output.status.success();
-  let text = if success {
-    stdout.as_ref()
+  let text: &str = if success {
+    stdout.as_str()
   } else if !stderr.trim().is_empty() {
-    stderr.as_ref()
+    stderr.as_str()
   } else {
-    stdout.as_ref()
+    stdout.as_str()
   };
 
   let lines: Vec<&str> = text
@@ -635,15 +632,17 @@ fn ping_once(address: &str) -> Result<String, String> {
     .filter(|line| !line.is_empty())
     .collect();
 
-  let preferred = lines.iter().copied().find(|line| {
-    line.contains("Reply from")
-      || line.contains("bytes from")
-      || line.contains("time=")
-      || line.contains("time<")
-  });
+  let preferred = if success {
+    select_success_line(&lines)
+      .or_else(|| select_non_header_line(&lines))
+      .or_else(|| lines.first().copied())
+  } else {
+    select_error_line(&lines)
+      .or_else(|| select_non_header_line(&lines))
+      .or_else(|| lines.first().copied())
+  };
 
   let summary = preferred
-    .or_else(|| lines.get(0).copied())
     .unwrap_or("");
 
   let summary = if summary.is_empty() {
@@ -657,6 +656,98 @@ fn ping_once(address: &str) -> Result<String, String> {
   } else {
     Err(summary)
   }
+}
+
+fn select_success_line<'a>(lines: &'a [&'a str]) -> Option<&'a str> {
+  lines.iter().copied().find(|line| {
+    let lower = line.to_ascii_lowercase();
+    line.contains("Reply from")
+      || line.contains("bytes from")
+      || line.contains("bytes=")
+      || lower.contains("time=")
+      || lower.contains("time<")
+      || lower.contains("ttl=")
+      || lower.contains("ms")
+      || line.contains("时间")
+      || line.contains("字节=")
+  })
+}
+
+fn select_error_line<'a>(lines: &'a [&'a str]) -> Option<&'a str> {
+  lines.iter().copied().find(|line| {
+    let lower = line.to_ascii_lowercase();
+    lower.contains("timed out")
+      || lower.contains("timeout")
+      || lower.contains("unreachable")
+      || lower.contains("general failure")
+      || lower.contains("could not find host")
+      || lower.contains("name or service not known")
+      || line.contains("请求超时")
+      || line.contains("无法访问")
+      || line.contains("一般故障")
+      || line.contains("找不到主机")
+      || line.contains("无法解析")
+  })
+}
+
+fn select_non_header_line<'a>(lines: &'a [&'a str]) -> Option<&'a str> {
+  lines.iter().copied().find(|line| !is_header_line(line))
+}
+
+fn is_header_line(line: &str) -> bool {
+  let lower = line.to_ascii_lowercase();
+  lower.starts_with("pinging ")
+    || lower.starts_with("ping ")
+    || line.contains("正在 Ping")
+    || line.contains("正在ping")
+}
+
+#[cfg(target_os = "windows")]
+fn ping_command(address: &str) -> Command {
+  const CREATE_NO_WINDOW: u32 = 0x08000000;
+  let mut cmd = Command::new("ping");
+  cmd.args(["-n", "1", address]);
+  cmd.creation_flags(CREATE_NO_WINDOW);
+  cmd
+}
+
+#[cfg(not(target_os = "windows"))]
+fn ping_command(address: &str) -> Command {
+  let mut cmd = Command::new("ping");
+  cmd.args(["-c", "1", address]);
+  cmd
+}
+
+#[cfg(target_os = "windows")]
+fn decode_ping_output(bytes: &[u8]) -> String {
+  use windows_sys::Win32::Globalization::GetOEMCP;
+
+  let cp = unsafe { GetOEMCP() };
+  match cp {
+    65001 => String::from_utf8_lossy(bytes).into_owned(),
+    936 => {
+      let (cow, _, _) = encoding_rs::GBK.decode(bytes);
+      cow.into_owned()
+    }
+    950 => {
+      let (cow, _, _) = encoding_rs::BIG5.decode(bytes);
+      cow.into_owned()
+    }
+    932 => {
+      let (cow, _, _) = encoding_rs::SHIFT_JIS.decode(bytes);
+      cow.into_owned()
+    }
+    949 => {
+      let (cow, _, _) = encoding_rs::EUC_KR.decode(bytes);
+      cow.into_owned()
+    }
+    _ => String::from_utf8_lossy(bytes).into_owned(),
+  }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn decode_ping_output(bytes: &[u8]) -> String {
+  String::from_utf8_lossy(bytes).into_owned()
 }
 
 fn append_line(path: &Path, line: &str) -> std::io::Result<()> {
